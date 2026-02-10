@@ -1,0 +1,53 @@
+# golangci-lint config for Go library. High-signal linters only; no formatting/import order.
+# https://golangci-lint.run/usage/configuration/
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  build-tags: []
+  exclude-dirs:
+    - vendor
+  exclude-files:
+    - '.*\\.gen\\.go$'
+    - '.*_string\\.go$'
+    - '.*\\.pb\\.go$'
+
+output:
+  format: colored-line-number
+  print-issued-linter-name: true
+  print-welcome: false
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - unused
+  disable-all: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions: []
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  unused:
+    check-exported: true
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+      text: "Close"
+    - path: _test\.go
+      linters:
+        - unused
+    - path: _test\.go
+      linters:
+        - ineffassign
+  max-issues-per-linter: 0
+  max-same-issues: 0

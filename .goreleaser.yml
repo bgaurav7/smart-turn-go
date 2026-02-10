@@ -1,0 +1,24 @@
+# GoReleaser config for Go library (no binaries).
+# See https://goreleaser.com/customization/
+version: 2
+
+# No builds — library only; release is tag + changelog.
+builds: []
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+
+release:
+  github:
+    owner: bgaurav7
+    name: smart-turn-go
+  draft: false
+  mode: replace
+  name_template: "{{ .Tag }}"
