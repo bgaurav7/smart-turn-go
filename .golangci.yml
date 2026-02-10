@@ -28,8 +28,6 @@ linters:
       enable-all: true
       disable:
         - fieldalignment
-    unused:
-      check-exported: true
   exclusions:
     paths:
       - vendor
