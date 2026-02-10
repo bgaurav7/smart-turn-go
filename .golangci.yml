@@ -6,49 +6,48 @@ run:
   timeout: 5m
   modules-download-mode: readonly
   build-tags: []
-  exclude-dirs:
-    - vendor
-  exclude-files:
-    - '.*\\.gen\\.go$'
-    - '.*_string\\.go$'
-    - '.*\\.pb\\.go$'
 
 output:
   formats:
     text: {}
 
 linters:
+  default: none
   enable:
     - govet
     - errcheck
     - staticcheck
     - ineffassign
     - unused
-  disable-all: true
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-    exclude-functions: []
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-  unused:
-    check-exported: true
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions: []
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    unused:
+      check-exported: true
+  exclusions:
+    paths:
+      - vendor
+      - '.*\.gen\.go$'
+      - '.*_string\.go$'
+      - '.*\.pb\.go$'
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+        text: "Close"
+      - path: _test\.go
+        linters:
+          - unused
+      - path: _test\.go
+        linters:
+          - ineffassign
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-      text: "Close"
-    - path: _test\.go
-      linters:
-        - unused
-    - path: _test\.go
-      linters:
-        - ineffassign
   max-issues-per-linter: 0
   max-same-issues: 0
