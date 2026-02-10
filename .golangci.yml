@@ -1,5 +1,7 @@
 # golangci-lint config for Go library. High-signal linters only; no formatting/import order.
 # https://golangci-lint.run/usage/configuration/
+version: "2"
+
 run:
   timeout: 5m
   modules-download-mode: readonly
