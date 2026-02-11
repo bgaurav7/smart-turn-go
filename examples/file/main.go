@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bgaurav7/smart-turn-go"
+	"github.com/cortexswarm/smart-turn-go"
 	"github.com/youpy/go-wav"
 )
 
