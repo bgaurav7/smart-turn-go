@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/bgaurav7/smart-turn-go"
+	"github.com/cortexswarm/smart-turn-go"
 	"github.com/gen2brain/malgo"
 )
 
@@ -45,10 +45,10 @@ func main() {
 	cfg := smartturn.Config{
 		SampleRate:         sampleRate,
 		ChunkSize:          chunkSize,
-		VadThreshold:       0.5,
+		VadThreshold:       0.75,
 		PreSpeechMs:        200,
-		StopMs:             1000,
-		MaxDurationSeconds: 8,
+		StopMs:             300,
+		MaxDurationSeconds: 600,
 		SileroVADModelPath: sileroPath,
 		SmartTurnModelPath: smartTurnPath,
 	}
