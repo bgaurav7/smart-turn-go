@@ -30,6 +30,13 @@ type Engine struct {
 
 	segmentEmitSamples  int // target samples per OnSegmentReady slice
 	segmentEmittedSoFar int // how many samples of the current segment have been emitted
+
+	// When a segment ends but Smart-Turn fails (prob < TurnThreshold), we skip
+	// OnSpeechEnd and set turnPending. We do not fire OnSpeechStart for the
+	// next segment until we eventually call OnSpeechEnd (by success or timeout).
+	turnPending             bool
+	turnPendingSilenceChunks int
+	turnTimeoutChunks        int // ceil(TurnTimeoutMs / chunkMs)
 }
 
 // New creates an engine from config and callbacks. It validates config, loads ONNX
@@ -60,18 +67,26 @@ func New(cfg Config, cb Callbacks) (*Engine, error) {
 		_ = vad.destroy()
 		return nil, err
 	}
-	seg := newSegmenter(cfg.SampleRate, cfg.ChunkSize, cfg.PreSpeechMs, cfg.StopMs, cfg.MaxDurationSeconds)
+	seg := newSegmenter(cfg.SampleRate, cfg.ChunkSize, cfg.VadPreSpeechMs, cfg.VadStopMs, cfg.TurnMaxDurationSeconds)
 	e.vad = vad
 	e.segmenter = seg
 	e.smartTurn = st
 	// Derive how many samples correspond to one emit interval.
-	if cfg.SegmentEmitMs > 0 {
-		e.segmentEmitSamples = int(float64(cfg.SegmentEmitMs) * float64(cfg.SampleRate) / 1000.0)
+	if cfg.TurnSegmentEmitMs > 0 {
+		e.segmentEmitSamples = int(float64(cfg.TurnSegmentEmitMs) * float64(cfg.SampleRate) / 1000.0)
 		if e.segmentEmitSamples <= 0 {
 			e.segmentEmitSamples = cfg.ChunkSize
 		}
 	} else {
 		e.segmentEmitSamples = cfg.ChunkSize
+	}
+	// 512 samples @ 16 kHz = 32 ms per chunk
+	chunkMs := 32
+	if cfg.TurnTimeoutMs > 0 {
+		e.turnTimeoutChunks = (cfg.TurnTimeoutMs + chunkMs - 1) / chunkMs
+		if e.turnTimeoutChunks <= 0 {
+			e.turnTimeoutChunks = 1
+		}
 	}
 	return e, nil
 }
@@ -120,12 +135,29 @@ func (e *Engine) PushPCM(chunk []float32) error {
 	}
 	isSpeech := prob > e.cfg.VadThreshold
 
+	// If we're in a pending turn (skipped OnSpeechEnd), count silence and maybe timeout.
+	if e.turnPending {
+		if isSpeech {
+			e.turnPendingSilenceChunks = 0
+		} else {
+			e.turnPendingSilenceChunks++
+			if e.turnPendingSilenceChunks >= e.turnTimeoutChunks {
+				e.turnPending = false
+				e.turnPendingSilenceChunks = 0
+				if e.cb.OnSpeechEnd != nil {
+					e.cb.OnSpeechEnd()
+				}
+			}
+		}
+	}
+
 	res := e.segmenter.processChunk(isSpeech, chunk)
 	// Reset emitted counter on a new segment.
 	if res.Started {
 		e.segmentEmittedSoFar = 0
 	}
-	if res.Started && e.cb.OnSpeechStart != nil {
+	// Do not fire OnSpeechStart again if we're still in a turn that didn't complete.
+	if res.Started && !e.turnPending && e.cb.OnSpeechStart != nil {
 		e.cb.OnSpeechStart()
 	}
 	if e.cb.OnChunk != nil {
@@ -147,7 +179,9 @@ func (e *Engine) PushPCM(chunk []float32) error {
 	}
 
 	if res.Ended {
-		// Emit any remaining tail for this segment before speech end callback.
+		shouldEndSpeech := true
+
+		// Emit any remaining tail for this segment before Smart-Turn or speech end callback.
 		if len(res.Segment) > e.segmentEmittedSoFar && e.cb.OnSegmentReady != nil {
 			start := e.segmentEmittedSoFar
 			end := len(res.Segment)
@@ -155,21 +189,48 @@ func (e *Engine) PushPCM(chunk []float32) error {
 			copy(slice, res.Segment[start:end])
 			e.cb.OnSegmentReady(slice)
 		}
-		if e.cb.OnSpeechEnd != nil {
-			e.cb.OnSpeechEnd()
+
+		// Best-effort Smart-Turn inference on the full segment. If the model
+		// fails or reports a low probability, we skip OnSpeechEnd so the host
+		// can treat this as an incomplete turn.
+		if res.EndedBySilence && e.smartTurn != nil {
+			if r, err := e.smartTurn.run(res.Segment); err != nil {
+				if e.cb.OnError != nil {
+					e.cb.OnError(err)
+				}
+				shouldEndSpeech = false
+			} else if e.cb.OnTurnPrediction != nil {
+				e.cb.OnTurnPrediction(r.Complete, r.Probability)
+				if r.Probability < e.cfg.TurnThreshold {
+					shouldEndSpeech = false
+				}
+			}
+		}
+
+		if shouldEndSpeech {
+			e.turnPending = false
+			e.turnPendingSilenceChunks = 0
+			if e.cb.OnSpeechEnd != nil {
+				e.cb.OnSpeechEnd()
+			}
+		} else {
+			e.turnPending = true
+			e.turnPendingSilenceChunks = 0
 		}
 		e.segmentEmittedSoFar = 0
 	}
 	return nil
 }
 
-// Reset clears VAD state and segment state. Sessions are not closed.
+// Reset clears VAD state, segment state, and turn-pending state. Sessions are not closed.
 func (e *Engine) Reset() {
 	if e.closed {
 		return
 	}
 	e.vad.resetState()
 	e.segmenter.reset()
+	e.turnPending = false
+	e.turnPendingSilenceChunks = 0
 }
 
 // Close releases ONNX sessions and resources. The engine must not be used after Close.

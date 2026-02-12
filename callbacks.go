@@ -13,5 +13,10 @@ type Callbacks struct {
 	OnChunk        func(chunk []float32)
 	OnSegmentReady func(segment []float32)
 
+	// OnTurnPrediction receives Smart-Turn's decision when a segment ends by VAD
+	// silence (not by max-duration cap). `complete` is true when the model
+	// thinks the turn is finished; `probability` is the underlying score.
+	OnTurnPrediction func(complete bool, probability float32)
+
 	OnError func(err error)
 }

@@ -43,14 +43,17 @@ Example setup:
 
 ```go
 cfg := smartturn.Config{
-    SampleRate:         16000,   // must be 16000
-    ChunkSize:          512,     // must be 512
-    VadThreshold:       0.5,
-    PreSpeechMs:        200,
-    StopMs:             1000,
-    MaxDurationSeconds: 8,
-    SileroVADModelPath: "data/silero_vad.onnx",
-    SmartTurnModelPath: "data/smart-turn-v3.2-cpu.onnx",
+    SampleRate:             16000,   // must be 16000
+    ChunkSize:              512,     // must be 512
+    VadThreshold:           0.5,
+    VadPreSpeechMs:         200,
+    VadStopMs:              800,
+    TurnMaxDurationSeconds: 8,
+    TurnSegmentEmitMs:      1000,
+    TurnThreshold:          0.9,
+    TurnTimeoutMs:          1000,
+    SileroVADModelPath:     "data/silero_vad.onnx",
+    SmartTurnModelPath:     "data/smart-turn-v3.2-cpu.onnx",
 }
 ```
 

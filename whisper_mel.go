@@ -11,14 +11,51 @@ const (
 	whisper8sFrames  = 800
 )
 
-// computeWhisperMel converts 8s of mono float32 audio (128000 samples) to
-// log-mel features shape (80, 800). Audio is truncated to last 8s or left-padded.
+// computeWhisperMel converts mono float32 audio to Whisper-style log-mel
+// features shape (80, 800), following the behavior of
+// transformers.WhisperFeatureExtractor:
+//   - 16 kHz, 8s window (truncate to last 8s or left-pad with zeros)
+//   - STFT: n_fft=400, hop=160, Hann window, power=2
+//   - Mel filterbank: 80 bins, 0–8000 Hz, Slaney-style triangles
+//   - Log10 mel, global dynamic range compression (max-8dB), then scaled:
+//       log_spec = (max(log_spec, log_spec.max()-8) + 4) / 4
+//   - Zero-mean, unit-variance normalization is applied to the 8s audio window
+//     before STFT, similar to do_normalize=True on the waveform.
 func computeWhisperMel(audio []float32) []float32 {
+	if len(audio) == 0 {
+		return nil
+	}
+	// Take last 8 seconds (or full audio if shorter) for normalization.
+	if len(audio) > whisper8sSamples {
+		audio = audio[len(audio)-whisper8sSamples:]
+	}
+	// Zero-mean, unit-variance normalize on the non-padded samples.
+	var mean float64
+	for _, v := range audio {
+		mean += float64(v)
+	}
+	mean /= float64(len(audio))
+	var variance float64
+	for _, v := range audio {
+		d := float64(v) - mean
+		variance += d * d
+	}
+	variance /= float64(len(audio))
+	if variance < 1e-7 {
+		variance = 1e-7
+	}
+	scale := 1.0 / math.Sqrt(variance)
+
 	padded := make([]float32, whisper8sSamples)
-	if n := len(audio); n >= whisper8sSamples {
-		copy(padded, audio[n-whisper8sSamples:])
+	if len(audio) >= whisper8sSamples {
+		for i := 0; i < whisper8sSamples; i++ {
+			padded[i] = float32((float64(audio[i]) - mean) * scale)
+		}
 	} else {
-		copy(padded[whisper8sSamples-n:], audio)
+		offset := whisper8sSamples - len(audio)
+		for i := 0; i < len(audio); i++ {
+			padded[offset+i] = float32((float64(audio[i]) - mean) * scale)
+		}
 	}
 	return computeWhisperMelFromPadded(padded)
 }
@@ -27,7 +64,7 @@ func computeWhisperMelFromPadded(padded []float32) []float32 {
 	if len(padded) != whisper8sSamples {
 		return nil
 	}
-	// STFT: 400 window, 160 hop -> 798 frames from 128000; we pad to 800
+	// STFT: 400 window, 160 hop -> ~800 frames from 128000; we pad to 800
 	// Power spectrum: 400-point real FFT -> 201 bins
 	nBins := whisperNFFT/2 + 1
 	mel := make([]float32, whisperNMels*whisper8sFrames)
@@ -55,8 +92,25 @@ func computeWhisperMelFromPadded(padded []float32) []float32 {
 			if v < 1e-10 {
 				v = 1e-10
 			}
-			mel[m*whisper8sFrames+t] = float32(math.Log(float64(v)))
+			// log10 mel
+			mel[m*whisper8sFrames+t] = float32(math.Log10(float64(v)))
 		}
+	}
+	// Global dynamic range compression and scaling:
+	// log_spec = max(log_spec, log_spec.max()-8)
+	// log_spec = (log_spec + 4) / 4
+	maxVal := float32(-1e30)
+	for i := range mel {
+		if mel[i] > maxVal {
+			maxVal = mel[i]
+		}
+	}
+	floor := maxVal - 8.0
+	for i := range mel {
+		if mel[i] < floor {
+			mel[i] = floor
+		}
+		mel[i] = (mel[i] + 4.0) / 4.0
 	}
 	return mel
 }
@@ -83,9 +137,10 @@ func getMelFilterbank(nMels, nBins int) []float32 {
 	if cachedMelFilters != nil && len(cachedMelFilters) == nMels*nBins {
 		return cachedMelFilters
 	}
-	// Mel scale: 20 Hz to 8000 Hz (Nyquist at 16kHz is 8kHz)
+	// Mel scale: 0 Hz to 8000 Hz (Nyquist at 16kHz is 8kHz), similar to
+	// WhisperFeatureExtractor's mel_filter_bank with norm=\"slaney\", mel_scale=\"slaney\".
 	sampleRate := 16000.0
-	lowFreq := 20.0
+	lowFreq := 0.0
 	highFreq := 8000.0
 	lowMel := hzToMel(lowFreq)
 	highMel := hzToMel(highFreq)

@@ -43,15 +43,17 @@ func main() {
 	}
 
 	cfg := smartturn.Config{
-		SampleRate:         sampleRate,
-		ChunkSize:          chunkSize,
-		VadThreshold:       0.75,
-		PreSpeechMs:        200,
-		StopMs:             500,
-		MaxDurationSeconds: 600,
-		SegmentEmitMs:      1000,
-		SileroVADModelPath: sileroPath,
-		SmartTurnModelPath: smartTurnPath,
+		SampleRate:             sampleRate,
+		ChunkSize:              chunkSize,
+		VadThreshold:           0.75,
+		VadPreSpeechMs:         200,
+		VadStopMs:              800,
+		TurnMaxDurationSeconds: 600,
+		TurnSegmentEmitMs:      1000,
+		TurnThreshold:          0.9,
+		TurnTimeoutMs:          1000,
+		SileroVADModelPath:     sileroPath,
+		SmartTurnModelPath:     smartTurnPath,
 	}
 	cb := smartturn.Callbacks{
 		OnListeningStarted: func() { fmt.Println("[callback] listening started") },
@@ -59,6 +61,7 @@ func main() {
 		OnSpeechStart:      func() { fmt.Println("[callback] speech start") },
 		OnSpeechEnd:        func() { fmt.Println("[callback] speech end") },
 		OnSegmentReady:     func(seg []float32) { fmt.Printf("[callback] segment ready (%d samples)\n", len(seg)) },
+		OnTurnPrediction:   func(complete bool, prob float32) { fmt.Printf("[callback] turn prediction complete=%v prob=%.3f\n", complete, prob) },
 		OnError:            func(err error) { fmt.Printf("[callback] error: %v\n", err) },
 	}
 

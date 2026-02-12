@@ -48,15 +48,17 @@ func main() {
 	}
 
 	cfg := smartturn.Config{
-		SampleRate:         16000,
-		ChunkSize:          512,
-		VadThreshold:       0.75,
-		PreSpeechMs:        200,
-		StopMs:             500,
-		MaxDurationSeconds: 600,
-		SegmentEmitMs:      1000,
-		SileroVADModelPath: sileroPath,
-		SmartTurnModelPath: smartTurnPath,
+		SampleRate:             16000,
+		ChunkSize:              512,
+		VadThreshold:           0.75,
+		VadPreSpeechMs:         200,
+		VadStopMs:              800,
+		TurnMaxDurationSeconds: 600,
+		TurnSegmentEmitMs:      1000,
+		TurnThreshold:          0.9,
+		TurnTimeoutMs:          1000,
+		SileroVADModelPath:     sileroPath,
+		SmartTurnModelPath:     smartTurnPath,
 	}
 	var segmentNum int
 	cb := smartturn.Callbacks{
@@ -64,6 +66,9 @@ func main() {
 		OnListeningStopped: func() { fmt.Println("[event] listening stopped") },
 		OnSpeechStart:      func() { fmt.Println("[event] speech start") },
 		OnSpeechEnd:        func() { fmt.Println("[event] speech end") },
+		OnTurnPrediction: func(complete bool, prob float32) {
+			fmt.Printf("[event] turn prediction complete=%v prob=%.3f\n", complete, prob)
+		},
 		OnSegmentReady: func(seg []float32) {
 			segmentNum++
 			name := filepath.Join(outDir, fmt.Sprintf("segment_%03d.wav", segmentNum))
