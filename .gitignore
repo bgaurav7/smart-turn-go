@@ -31,3 +31,5 @@ Thumbs.db
 
 # Optional: large local test assets (uncomment if you don't want to track)
 # data/*.wav
+
+models/

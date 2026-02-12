@@ -38,6 +38,10 @@ type Config struct {
 
 	SileroVADModelPath string // path to silero_vad.onnx
 	SmartTurnModelPath string // path to smart-turn-v3.2-cpu.onnx
+
+	// ONNXRuntimeLibPath is the path to the ONNX Runtime shared library (e.g. libonnxruntime.dylib).
+	// If empty, the SDK uses ONNXRUNTIME_SHARED_LIBRARY_PATH env var if set; otherwise onnxruntime_go default.
+	ONNXRuntimeLibPath string
 }
 
 // validate checks Config and returns an error on invalid or missing values.

@@ -9,17 +9,16 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/cortexswarm/smart-turn-go"
+	"github.com/cortexswarm/smart-turn-go/examples/utility/resolver"
 	"github.com/gen2brain/malgo"
 )
 
 const (
-	chunkSize    = 512
-	sampleRate   = 16000
-	defaultModel = "data"
+	chunkSize  = 512
+	sampleRate = 16000
 )
 
 func main() {
@@ -33,13 +32,25 @@ func main() {
 		ctx.Free()
 	}()
 
-	sileroPath := filepath.Join(defaultModel, "silero_vad.onnx")
-	smartTurnPath := filepath.Join(defaultModel, "smart-turn-v3.2-cpu.onnx")
-	if a, err := filepath.Abs(sileroPath); err == nil {
-		sileroPath = a
+	// Resolve (download when needed) models and ONNX Runtime lib into models/.
+	sileroPath, err := resolver.ResolveSileroVAD(resolver.ModelsDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve Silero VAD: %v\n", err)
+		os.Exit(1)
 	}
-	if a, err := filepath.Abs(smartTurnPath); err == nil {
-		smartTurnPath = a
+	smartTurnPath, err := resolver.ResolveSmartTurn(resolver.ModelsDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve Smart-Turn: %v\n", err)
+		os.Exit(1)
+	}
+	onnxLibPath, err := resolver.ResolveONNXRuntimeLibWithDownload(resolver.ModelsDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve ONNX Runtime lib: %v\n", err)
+		os.Exit(1)
+	}
+	if onnxLibPath == "" {
+		fmt.Fprintf(os.Stderr, "ONNX Runtime lib not found for this platform; set ONNXRUNTIME_SHARED_LIBRARY_PATH or place lib in models/\n")
+		os.Exit(1)
 	}
 
 	cfg := smartturn.Config{
@@ -54,6 +65,7 @@ func main() {
 		TurnTimeoutMs:          1000,
 		SileroVADModelPath:     sileroPath,
 		SmartTurnModelPath:     smartTurnPath,
+		ONNXRuntimeLibPath:     onnxLibPath,
 	}
 	cb := smartturn.Callbacks{
 		OnListeningStarted: func() { fmt.Println("[callback] listening started") },
